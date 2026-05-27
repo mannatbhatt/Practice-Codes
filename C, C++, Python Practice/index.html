@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Electricity Bill Calculator</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --bg-color: #e6faee;
+      --text-color: #1a1a1a;
+      --card-bg: #ffffff;
+    }
+
+    [data-theme="dark"] {
+      --bg-color: #0b3d0b;
+      --text-color: #e0ffe0;
+      --card-bg: #1e4d1e;
+    }
+
+    body {
+      margin: 0;
+      font-family: 'Inter', sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: auto;
+    }
+
+    .toggle-btn {
+      float: right;
+      margin-bottom: 10px;
+    }
+
+    h1 {
+      text-align: center;
+    }
+
+    .card {
+      background-color: var(--card-bg);
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      margin-bottom: 30px;
+    }
+
+    label {
+      font-weight: 600;
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    input,
+    select {
+      padding: 8px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      width: 100%;
+      margin-bottom: 10px;
+    }
+
+    select option[disabled] {
+      color: #999;
+      font-style: italic;
+    }
+
+    .appliance-row {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr 1fr auto;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      border-radius: 8px;
+      border: none;
+      background-color: #4caf50;
+      color: white;
+      cursor: pointer;
+      margin-top: 10px;
+      margin-right: 10px;
+    }
+
+    .remove-btn {
+      background-color: #f44336;
+    }
+
+    #billOutput {
+      white-space: pre-wrap;
+      font-family: monospace;
+      padding: 20px;
+      background: var(--card-bg);
+      border-radius: 12px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    }
+
+    canvas {
+      max-width: 100%;
+      height: 300px;
+      margin-top: 20px;
+    }
+    
+    .custom-appliance-inputs {
+      display: none;
+      margin-top: 10px;
+      padding: 10px;
+      background-color: rgba(0,0,0,0.05);
+      border-radius: 8px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container" data-theme="light">
+    <button class="toggle-btn" onclick="toggleTheme()">Toggle Dark/Light Mode</button>
+    <h1>Monthly Electricity Bill Calculator</h1>
+
+    <div class="card">
+      <label>User's Name</label>
+      <input id="userName" type="text" placeholder="Enter your name" />
+
+      <label>Add Appliance</label>
+      <div class="appliance-row">
+        <select id="applianceType" onchange="handleApplianceSelection()">
+          <option value="LED Bulb|10">LED Bulb (10W)</option>
+          <option value="Ceiling Fan|70">Ceiling Fan (70W)</option>
+          <option value="AC|2000">AC (2000W)</option>
+          <option value="Washing Machine|500">Washing Machine (500W)</option>
+          <option value="Refrigerator|150">Refrigerator (150W)</option>
+          <option value="Microwave|1200">Microwave (1200W)</option>
+          <option value="Heater|1500">Heater (1500W)</option>
+          <option value="Iron|1200">Iron (1200W)</option>
+          <option value="Television|100">Television (100W)</option>
+          <option value="Laptop|60">Laptop (60W)</option>
+          <option value="Dishwasher|1200">Dishwasher (1200W)</option>
+          <option value="Water Heater|3000">Water Heater (3000W)</option>
+          <option value="Blender|300">Blender (300W)</option>
+          <option value="Fan|75">Fan (75W)</option>
+          <option value="Vacuum Cleaner|1400">Vacuum Cleaner (1400W)</option>
+          <option value="Inverter|500">Inverter (500W)</option>
+          <option value="other">Other (Custom Appliance)</option>
+        </select>
+        <input type="number" id="countInput" placeholder="Count" min="1" value="1" />
+        <input type="number" id="hoursInput" placeholder="Hours/Day" min="0.1" step="0.1" />
+        <button onclick="addAppliance()">Add</button>
+      </div>
+      
+      <div id="customApplianceInputs" class="custom-appliance-inputs">
+        <label>Custom Appliance Name</label>
+        <input type="text" id="customApplianceName" placeholder="Enter appliance name">
+        <label>Wattage (W)</label>
+        <input type="number" id="customApplianceWattage" placeholder="Enter wattage" min="1">
+      </div>
+
+      <div id="applianceList"></div>
+
+      <button onclick="calculateBill()">Calculate Monthly Bill</button>
+      <button onclick="downloadPDF()">Download PDF</button>
+    </div>
+
+    <div id="billOutput"></div>
+    <canvas id="billChart"></canvas>
+  </div>
+
+  <script>
+    // Make jsPDF available in the global scope
+    const { jsPDF } = window.jspdf;
+    
+    const applianceList = [];
+    let chart = null;
+    const usedAppliances = new Set();
+
+    function toggleTheme() {
+      const container = document.querySelector(".container");
+      container.setAttribute("data-theme", container.getAttribute("data-theme") === "dark" ? "light" : "dark");
+    }
+    
+    function handleApplianceSelection() {
+      const select = document.getElementById("applianceType");
+      const customInputs = document.getElementById("customApplianceInputs");
+      
+      if (select.value === "other") {
+        customInputs.style.display = "block";
+      } else {
+        customInputs.style.display = "none";
+      }
+    }
+
+    function addAppliance() {
+      const select = document.getElementById("applianceType");
+      let name, watt;
+      
+      if (select.value === "other") {
+        // Handle custom appliance
+        name = document.getElementById("customApplianceName").value.trim();
+        watt = parseInt(document.getElementById("customApplianceWattage").value);
+        
+        if (!name || !watt || watt <= 0) {
+          alert("Please enter valid appliance name and wattage.");
+          return;
+        }
+      } else {
+        // Handle predefined appliance
+        [name, watt] = select.value.split("|");
+      }
+      
+      const count = parseInt(document.getElementById("countInput").value) || 1;
+      const hours = parseFloat(document.getElementById("hoursInput").value);
+
+      if (!hours || hours <= 0) {
+        alert("Please enter valid hours per day.");
+        return;
+      }
+
+      const id = Date.now(); // unique ID
+      applianceList.push({ id, name, watt: +watt, count, hours });
+      
+      // Mark this appliance as used
+      usedAppliances.add(name);
+      
+      // Disable the option in the dropdown if it's a predefined appliance
+      if (select.value !== "other") {
+        updateApplianceOptions();
+      }
+      
+      // Clear inputs for next addition
+      document.getElementById("countInput").value = 1;
+      document.getElementById("hoursInput").value = "";
+      
+      // Clear custom inputs if used
+      if (select.value === "other") {
+        document.getElementById("customApplianceName").value = "";
+        document.getElementById("customApplianceWattage").value = "";
+        document.getElementById("customApplianceInputs").style.display = "none";
+        select.value = "LED Bulb|10"; // Reset to default
+      }
+      
+      renderApplianceList();
+    }
+
+    function updateApplianceOptions() {
+      const select = document.getElementById("applianceType");
+      
+      // Update all options except "Other"
+      Array.from(select.options).forEach(option => {
+        if (option.value !== "other") {
+          const [name] = option.value.split("|");
+          if (usedAppliances.has(name)) {
+            option.disabled = true;
+          }
+        }
+      });
+      
+      // Select the first available option
+      const firstAvailable = Array.from(select.options).find(option => !option.disabled && option.value !== "other");
+      if (firstAvailable) {
+        firstAvailable.selected = true;
+      }
+    }
+
+    function removeAppliance(id) {
+      const index = applianceList.findIndex(appl => appl.id === id);
+      if (index !== -1) {
+        // Remove from used appliances set
+        usedAppliances.delete(applianceList[index].name);
+        // Remove from list
+        applianceList.splice(index, 1);
+        // Update dropdown options
+        updateApplianceOptions();
+        renderApplianceList();
+      }
+    }
+
+    function renderApplianceList() {
+      const container = document.getElementById("applianceList");
+      container.innerHTML = "";
+
+      applianceList.forEach(appliance => {
+        const row = document.createElement("div");
+        row.className = "appliance-row";
+        row.innerHTML = `  
+          <div>${appliance.name} (${appliance.watt}W)</div>
+          <div>${appliance.count}</div>
+          <div>${appliance.hours} hr/day</div>
+          <div>${((appliance.watt * appliance.count * appliance.hours * 30) / 1000).toFixed(2)} units</div>
+          <button class="remove-btn" onclick="removeAppliance(${appliance.id})">Remove</button>
+        `;
+        container.appendChild(row);
+      });
+    }
+
+    function calculateBill() {
+      const userName = document.getElementById("userName").value || "User";
+
+      let totalUnits = 0;
+      let breakdown = "";
+
+      applianceList.forEach(({ name, watt, count, hours }) => {
+        const monthlyUnits = (watt * count * hours * 30) / 1000;
+        totalUnits += monthlyUnits;
+        breakdown += `${name}: ${monthlyUnits.toFixed(2)} units\n`;
+      });
+
+      const peakUnits = totalUnits * 0.2;
+      const offPeakUnits = totalUnits * 0.8;
+      const energyCharges = (peakUnits * 9) + (offPeakUnits * 6);
+
+      const fixedCharges = 126;
+      const wheelingCharges = 1.17 * totalUnits;
+      const FAC = 0.2 * totalUnits;
+      const electricityDuty = 0.16 * energyCharges;
+      const totalBill = fixedCharges + energyCharges + wheelingCharges + FAC + electricityDuty;
+
+      const billText = `  
+Electricity Bill (Monthly)
+==========================
+Consumer Name: ${userName}
+Bill Period: 1 Month (30 days)
+
+${breakdown}
+Total Units: ${totalUnits.toFixed(2)} units
+Peak Time Units (20%): ${peakUnits.toFixed(2)} units
+Off-Peak Time Units (80%): ${offPeakUnits.toFixed(2)} units
+
+Charges:
+Fixed Charges: ₹${fixedCharges.toFixed(2)}
+Energy Charges: ₹${energyCharges.toFixed(2)}
+Wheeling Charges: ₹${wheelingCharges.toFixed(2)}
+Fuel Adjustment Charge (FAC): ₹${FAC.toFixed(2)}
+Electricity Duty: ₹${electricityDuty.toFixed(2)}
+
+Total Bill: ₹${totalBill.toFixed(2)}
+`;
+
+      document.getElementById("billOutput").textContent = billText;
+
+      updateChart(energyCharges, wheelingCharges, FAC, electricityDuty, fixedCharges);
+    }
+
+    function updateChart(energyCharges, wheelingCharges, FAC, electricityDuty, fixedCharges) {
+      const ctx = document.getElementById("billChart").getContext("2d");
+      if (chart) {
+        chart.destroy();
+      }
+
+      chart = new Chart(ctx, {
+        type: 'pie',
+        data: {
+          labels: ['Energy Charges', 'Wheeling Charges', 'FAC', 'Electricity Duty', 'Fixed Charges'],
+          datasets: [{
+            label: 'Bill Breakdown',
+            data: [energyCharges, wheelingCharges, FAC, electricityDuty, fixedCharges],
+            backgroundColor: ['#ffcc00', '#4caf50', '#2196f3', '#f44336', '#ff9800'],
+          }]
+        }
+      });
+    }
+
+    function downloadPDF() {
+      // Create a new jsPDF instance
+      const doc = new jsPDF();
+      const element = document.getElementById("billOutput");
+      const userName = document.getElementById("userName").value || "User";
+      
+      // First add a title
+      doc.setFontSize(16);
+      doc.text("Electricity Bill Report", 105, 15, { align: "center" });
+      doc.setFontSize(12);
+      doc.text("Generated on: " + new Date().toLocaleDateString(), 105, 22, { align: "center" });
+      
+      // Use html2canvas to capture the bill content
+      html2canvas(element).then(canvas => {
+        // Add the canvas as an image to the PDF
+        const imgData = canvas.toDataURL('image/png');
+        doc.addImage(imgData, 'PNG', 15, 30, 180, 0);
+        
+        // Add chart if it exists
+        if (chart) {
+          html2canvas(document.getElementById("billChart")).then(chartCanvas => {
+            const chartImgData = chartCanvas.toDataURL('image/png');
+            const pdfHeight = doc.internal.pageSize.getHeight();
+            
+            // Add chart on a new page if needed
+            if (doc.lastAutoTable?.finalY > pdfHeight - 100) {
+              doc.addPage();
+              doc.addImage(chartImgData, 'PNG', 15, 15, 180, 100);
+            } else {
+              doc.addImage(chartImgData, 'PNG', 15, 150, 180, 100);
+            }
+            
+            // Save the PDF
+            doc.save(`ElectricityBill_${userName.replace(/\s+/g, '')}.pdf`);
+          });
+        } else {
+          // Save the PDF without chart
+          doc.save(`ElectricityBill_${userName.replace(/\s+/g, '')}.pdf`);
+        }
+      });
+    }
+  </script>
+</body>
+
+</html>
+
